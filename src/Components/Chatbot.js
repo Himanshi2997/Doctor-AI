@@ -38,17 +38,39 @@ const Chatbot = () => {
       socket.emit("save:session");
     });
 
-    socket.on("save:ok", ({ patientId }) => {
-      addMessage("bot", `Saved conversation (patient id ${patientId})`);
+    socket.on("save:ok", ({ patientId, notificationEmitted }) => {
+      if (notificationEmitted) {
+        addMessage(
+          "bot",
+          `Saved conversation (patient id ${patientId}) — doctor will be notified.`
+        );
+      } else {
+        addMessage(
+          "bot",
+          `Saved conversation (patient id ${patientId}) — no symptoms captured; doctor will not be notified.`
+        );
+      }
     });
     socket.on("save:error", (err) => {
       addMessage("bot", `Failed to save conversation: ${err}`);
     });
+    socket.on("telegram:link", ({ link }) => {
+      // Do not auto-open Telegram link; insert a clickable bot message instead
+      setMessages((prev) => [
+        ...prev,
+        { from: "bot", text: `Doctor notification link: ${link}`, link },
+      ]);
+    });
+    // intentionally ignore meeting:link events on the frontend
+    // server will still generate the meeting link after symptoms are captured,
+    // but the UI should not show or auto-open Google Meet links.
 
     return () => {
       socket.off("bot:message");
       socket.off("bot:ask");
       socket.off("bot:finished");
+      socket.off("meeting:link");
+      socket.off("telegram:link");
     };
   }, []); // empty deps = only once
 
@@ -100,7 +122,7 @@ const Chatbot = () => {
               {msg.from === "bot" && (
                 <MdOutlineMedicalServices
                   size={28}
-                  color="#1A1A45"
+                  color="#4A90E2"
                   style={{ marginRight: 6 }}
                 />
               )}
@@ -108,13 +130,24 @@ const Chatbot = () => {
               <div
                 style={{
                   ...styles.message,
-                  background: msg.from === "user" ? "#DCF8C6" : "#1A1A45",
+                  background: msg.from === "user" ? "#DCF8C6" : "#4A90E2",
                   color: msg.from === "user" ? "#000" : "#fff",
                   borderBottomRightRadius: msg.from === "user" ? "0px" : "15px",
                   borderBottomLeftRadius: msg.from === "user" ? "15px" : "0px",
                 }}
               >
-                {msg.text}
+                {msg.link ? (
+                  <a
+                    href={msg.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "#fff", textDecoration: "underline" }}
+                  >
+                    Open doctor notification
+                  </a>
+                ) : (
+                  msg.text
+                )}
               </div>
 
               {msg.from === "user" && (
@@ -157,7 +190,8 @@ const styles = {
   page: {
     width: "100vw",
     height: "100vh",
-    backgroundImage: "url('../../ecgback.jpeg')", // <-- Add this
+    backgroundImage:
+      "url('https://user-gen-media-assets.s3.amazonaws.com/gpt4o_images/eff43fa6-ba96-4669-9608-f01054d67217.png')", // <-- Add this
     backgroundSize: "cover", // scale image to cover entire area
     backgroundPosition: "center", // center the image
     backgroundRepeat: "no-repeat", // don’t repeat
@@ -170,16 +204,18 @@ const styles = {
   },
   chatContainer: {
     flex: 1,
+
     display: "flex",
     flexDirection: "column",
-    background: "#fff",
+    // background: "#fff",
+    background: "rgba(0, 0, 0, 0.8)",
     borderRadius: "12px",
     boxShadow: "0 8px 20px rgba(0,0,0,0.2)",
     height: "100%",
   },
   header: {
     //background: "#007BFF",
-    background: "#1A1A45",
+    background: "#4A90E2",
     color: "#fff",
     padding: "14px",
     display: "flex",
@@ -235,7 +271,7 @@ const styles = {
     marginRight: "8px",
   },
   sendBtn: {
-    background: "#1A1A45",
+    background: "#4A90E2",
     color: "#fff",
     padding: "10px 18px",
     borderRadius: "20px",
