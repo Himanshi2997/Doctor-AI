@@ -4,8 +4,8 @@ import io from "socket.io-client";
 import { FaUserCircle } from "react-icons/fa";
 import { MdOutlineMedicalServices } from "react-icons/md";
 
-const socket = io("http://localhost:5000"); // backend URL
-
+// const socket = io("http://localhost:5000"); // backend URL
+const socket = io("http://localhost:5001");  // updated port
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
