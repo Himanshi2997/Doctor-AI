@@ -1,38 +1,64 @@
-
 import React, { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
 import { FaUserCircle } from "react-icons/fa";
 import { MdOutlineMedicalServices } from "react-icons/md";
 
-// const socket = io("http://localhost:5000"); // backend URL
-const socket = io("http://localhost:5001");  // updated port
+// ✅ Connect to backend
+const socket = io("http://localhost:5001");
+
+// basic client-side socket debug
+socket.on("connect", () => {
+  console.log("Socket connected", socket.id);
+  // emit session:start after successful connect
+  socket.emit("session:start", { sessionId: Date.now().toString() });
+});
+socket.on("connect_error", (err) => console.error("Socket connect_error", err));
+socket.on("disconnect", (reason) => console.log("Socket disconnected", reason));
+
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const chatEndRef = useRef(null);
 
+  // Start session once
   useEffect(() => {
     socket.emit("session:start", { sessionId: Date.now().toString() });
 
-    socket.on("bot:message", (msg) => addMessage("bot", msg.text));
+    socket.on("bot:message", (msg) => {
+      addMessage("bot", msg.text);
+      // if backend signals finalization via text, request save
+      if (typeof msg.text === "string" && msg.text.includes("Thank you")) {
+        socket.emit("save:session");
+      }
+    });
     socket.on("bot:ask", (msg) => addMessage("bot", msg.questionText));
-    socket.on("bot:finished", () =>
-      addMessage("bot", "✅ Thank you. We’ve scheduled your consultation.")
-    );
+    socket.on("bot:finished", () => {
+      addMessage("bot", "✅ Thank you. We’ve scheduled your consultation.");
+      socket.emit("save:session");
+    });
+
+    socket.on("save:ok", ({ patientId }) => {
+      addMessage("bot", `Saved conversation (patient id ${patientId})`);
+    });
+    socket.on("save:error", (err) => {
+      addMessage("bot", `Failed to save conversation: ${err}`);
+    });
 
     return () => {
       socket.off("bot:message");
       socket.off("bot:ask");
       socket.off("bot:finished");
     };
-  }, []);
+  }, []); // empty deps = only once
 
+  // Auto-scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const addMessage = (from, text) => {
+    if (!text) return;
     setTyping(false);
     setMessages((prev) => [...prev, { from, text }]);
   };
@@ -41,7 +67,10 @@ const Chatbot = () => {
     if (!input.trim()) return;
     addMessage("user", input);
     setTyping(true);
-    socket.emit("user:message", { text: input });
+
+    // ✅ Send raw string, backend expects plain message
+    socket.emit("user:message", input);
+
     setInput("");
   };
 
@@ -71,7 +100,7 @@ const Chatbot = () => {
               {msg.from === "bot" && (
                 <MdOutlineMedicalServices
                   size={28}
-                  color="#007BFF"
+                  color="#1A1A45"
                   style={{ marginRight: 6 }}
                 />
               )}
@@ -79,12 +108,10 @@ const Chatbot = () => {
               <div
                 style={{
                   ...styles.message,
-                  background: msg.from === "user" ? "#DCF8C6" : "#007BFF",
+                  background: msg.from === "user" ? "#DCF8C6" : "#1A1A45",
                   color: msg.from === "user" ? "#000" : "#fff",
-                  borderBottomRightRadius:
-                    msg.from === "user" ? "0px" : "15px",
-                  borderBottomLeftRadius:
-                    msg.from === "user" ? "15px" : "0px",
+                  borderBottomRightRadius: msg.from === "user" ? "0px" : "15px",
+                  borderBottomLeftRadius: msg.from === "user" ? "15px" : "0px",
                 }}
               >
                 {msg.text}
@@ -130,12 +157,15 @@ const styles = {
   page: {
     width: "100vw",
     height: "100vh",
-    background: "#f5f6fa",
+    backgroundImage: "url('../../ecgback.jpeg')", // <-- Add this
+    backgroundSize: "cover", // scale image to cover entire area
+    backgroundPosition: "center", // center the image
+    backgroundRepeat: "no-repeat", // don’t repeat
     display: "flex",
     justifyContent: "center",
     alignItems: "flex-start",
     fontFamily: "Arial, sans-serif",
-    padding: "20px 5% 20px 5%", // <-- margin effect
+    padding: "20px 5% 20px 5%",
     boxSizing: "border-box",
   },
   chatContainer: {
@@ -145,10 +175,11 @@ const styles = {
     background: "#fff",
     borderRadius: "12px",
     boxShadow: "0 8px 20px rgba(0,0,0,0.2)",
-    height: "100%", // full height minus padding
+    height: "100%",
   },
   header: {
-    background: "#007BFF",
+    //background: "#007BFF",
+    background: "#1A1A45",
     color: "#fff",
     padding: "14px",
     display: "flex",
@@ -161,10 +192,12 @@ const styles = {
   chatWindow: {
     flex: 1,
     padding: "10px",
+    //backgroundImage: "url('../../back.jpeg')", // <-- Add this
+    background: "#D5D5E3",
     overflowY: "auto",
     display: "flex",
     flexDirection: "column",
-    background: "#f9f9f9",
+    // background: "#f9f9f9",
   },
   messageRow: {
     display: "flex",
@@ -186,7 +219,7 @@ const styles = {
   },
   inputRow: {
     display: "flex",
-    borderTop: "1px solid #ccc",
+    borderTop: "1px solid #301414ff",
     padding: "8px",
     background: "#fff",
     borderBottomLeftRadius: "12px",
@@ -202,7 +235,7 @@ const styles = {
     marginRight: "8px",
   },
   sendBtn: {
-    background: "#007BFF",
+    background: "#1A1A45",
     color: "#fff",
     padding: "10px 18px",
     borderRadius: "20px",
